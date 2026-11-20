@@ -67,10 +67,12 @@ function listForPrompt(rows) {
   ).join("\n");
 }
 
-const STYLE = `Пиши на български, ясно и приятелски, като за умен човек, който просто не е следил темата.
+const STYLE = `Пиши на български в сериозен, неутрален и информативен тон - като аналитичен бриф или енциклопедична справка.
+Без обръщения към читателя, без въведения и заключителни фрази, без емоционални думи, утешения или риторични въпроси.
+Само факти: дати, имена, институции, числа, причинно-следствени връзки.
 Използвай кратки заглавия с "### ", списъци с "- " и **удебеляване** за ключови имена и години.
 Когато се позоваваш на статия от архива, сложи номера ѝ в квадратни скоби, напр. [2].
-Не измисляй факти. Ако нещо не е сигурно или е спорно, кажи го. Максимум ~450 думи.`;
+Не измисляй факти. Ако нещо е непотвърдено или спорно, отбележи го изрично. Максимум ~450 думи.`;
 
 async function articlePrompt(id) {
   const [a] = await sb(`articles?select=${FIELDS}&id=eq.${encodeURIComponent(id)}`);
@@ -83,27 +85,27 @@ async function articlePrompt(id) {
   const seen = new Set();
   const related = [...p, ...t].filter((r) => !seen.has(r.id) && seen.add(r.id))
     .sort((x, y) => new Date(y.published_at) - new Date(x.published_at)).slice(0, 25);
-  const prompt = `Читателка току-що прочете тази новина и иска да разбере цялата картинка около нея.
+  const prompt = `Изготви справка за контекста и предисторията на следната новина.
 
 НОВИНАТА (${fmtDate(a.published_at)}, ${a.source_name}):
 ${a.title}${a.title_bg ? `\n(превод: ${a.title_bg})` : ""}
 ${a.summary || ""}
 Хора: ${(a.people || []).join(", ") || "-"} · Теми: ${(a.tags || []).join(", ") || "-"}
 
-СВЪРЗАНИ СТАТИИ ОТ НЕЙНИЯ АРХИВ:
+СВЪРЗАНИ СТАТИИ ОТ АРХИВА:
 ${related.length ? listForPrompt(related) : "(все още няма)"}
 
 Структура на отговора:
 ### Накратко
-2-3 изречения какво всъщност се случва.
+2-3 изречения за същността на събитието.
 ### Предистория
 Ключовите по-стари събития, довели дотук, хронологично и с години.
-### Кой кой е
-Основните участници и какво искат.
+### Участници
+Основните участници и техните позиции и интереси.
 ### Връзка с други новини
 Как се свързва със статиите от архива (с номера).
-### Какво да следиш
-2-3 неща, които предстоят или са важни.
+### Какво предстои
+2-3 предстоящи стъпки, срокове или отворени въпроси.
 
 ${STYLE}`;
   return { prompt, related };
@@ -112,9 +114,9 @@ ${STYLE}`;
 async function personPrompt(name) {
   const rows = await sb(`articles?select=${FIELDS}&people=cs.${encodeURIComponent(pgArray([name]))}` +
     `&order=published_at.desc&limit=30`);
-  const prompt = `Читателка цъкна върху името "${name}" в новините и иска да разбере кой е този човек и защо е важен.
+  const prompt = `Изготви кратка справка за "${name}" - кой е и защо е значим в новините.
 
-СТАТИИ ОТ НЕЙНИЯ АРХИВ, В КОИТО СЕ СПОМЕНАВА:
+СТАТИИ ОТ АРХИВА, В КОИТО СЕ СПОМЕНАВА:
 ${rows.length ? listForPrompt(rows) : "(все още няма)"}
 
 Структура на отговора:
@@ -139,7 +141,7 @@ export default async function handler(req, res) {
     const mode = q.mode === "person" ? "person" : "article";
     const subject = String(mode === "person" ? q.name : q.id || "").slice(0, 200);
     if (!subject) throw new Error("Липсва статия или име");
-    const key = `${mode}:${subject}`;
+    const key = `v2:${mode}:${subject}`;   // v2 = сериозен тон (старите анализи не се ползват)
 
     if (SERVICE && !q.refresh) {
       const [hit] = await sb(`analyses?select=content,created_at&key=eq.${encodeURIComponent(key)}`, SERVICE);

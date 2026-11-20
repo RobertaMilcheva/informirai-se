@@ -162,7 +162,7 @@ async function pageArticle(id) {
       <a class="btn primary" href="${esc(a.url)}" target="_blank" rel="noopener">Прочети в ${esc(a.source_name)} ↗</a>
       ${canFlip ? `<button class="btn ghost" id="flip">${showBg(a) ? "Оригинал (EN)" : "На български"}</button>` : ""}
     </div>
-    <button class="btn ghost full" id="ai-btn">🧩 Свържи картинката (AI)</button>
+    <button class="btn ghost full" id="ai-btn">Предистория и контекст (AI)</button>
     <div id="ai-box"></div>
     <div class="section-title">Свързани статии от архива</div>
     <div id="related">${loading()}</div>
@@ -173,7 +173,7 @@ async function pageArticle(id) {
   });
   document.getElementById("ai-btn").onclick = (e) => {
     e.target.remove();
-    aiPanel(document.getElementById("ai-box"), { mode: "article", id: a.id }, "AI търси предисторията и връзките… (до ~30 сек)");
+    aiPanel(document.getElementById("ai-box"), { mode: "article", id: a.id }, "Събирам предисторията и връзките… (до ~45 сек)");
   };
   const rel = document.getElementById("related");
   const arr = (x) => "{" + x.map((v) => `"${v.replace(/["\\]/g, "\\$&")}"`).join(",") + "}";
