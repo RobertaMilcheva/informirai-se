@@ -50,16 +50,16 @@ function activeSources(q) {
   return q.in("source", on.length ? on : ["__none__"]);
 }
 
-function card(a) {
-  const people = (a.people || []).slice(0, 4).map((p) => `<span class="chip person" data-go="#/p/${enc(p)}">${esc(p)}</span>`).join("");
-  const cats = (a.categories || []).slice(0, 2).map((c) => `<span class="chip" data-go="#/c/${enc(c)}">${esc(catName(c))}</span>`).join("");
-  return `<a class="card" href="#/a/${a.id}">
+function card(a, lead = false) {
+  const cat = (a.categories || [])[0];
+  const people = (a.people || []).slice(0, 4).map((p) => `<span data-go="#/p/${enc(p)}">${esc(p)}</span>`).join(", ");
+  return `<a class="card${lead && a.image_url ? " lead" : ""}" href="#/a/${a.id}">
     <div class="row"><div class="body">
-      <div class="meta"><span class="src">${esc(a.source_name)}</span><span>· ${ago(a.published_at)}</span>${a.lang !== "bg" ? `<span class="lang-badge">${showBg(a) ? "ПРЕВОД" : "EN"}</span>` : ""}</div>
+      <div class="kicker">${cat ? `<span class="cat" data-go="#/c/${enc(cat)}">${esc(catName(cat))}</span>` : ""}<span class="src">${esc(a.source_name)}</span><span>${ago(a.published_at)}</span>${a.lang !== "bg" ? `<span class="lang-badge">${showBg(a) ? "превод" : "EN"}</span>` : ""}</div>
       <h2>${esc(T(a))}</h2>
       ${S(a) ? `<p class="sum">${esc(S(a))}</p>` : ""}
+      ${people ? `<div class="people">${people}</div>` : ""}
     </div>${a.image_url ? `<img class="thumb" loading="lazy" src="${esc(a.image_url)}" alt="" onerror="this.remove()">` : ""}</div>
-    ${people || cats ? `<div class="chips">${cats}${people}</div>` : ""}
   </a>`;
 }
 
@@ -73,11 +73,11 @@ const loading = (t = "Зареждам…") => `<div class="loading"><div class=
 const errBox = (e) => `<div class="error">Нещо се обърка: ${esc(e.message || e)}</div>`;
 
 // списък със "Зареди още"
-async function feed(container, build, emptyText = "Още няма статии тук.") {
+async function feed(container, build, emptyText = "Още няма статии тук.", withLead = false) {
   let page = 0;
   const list = document.createElement("div");
   const more = document.createElement("button");
-  more.className = "btn ghost full"; more.textContent = "Зареди още";
+  more.className = "btn ghost full"; more.id = "more"; more.textContent = "Зареди още";
   container.append(list, more);
   async function load() {
     more.disabled = true; more.textContent = "Зареждам…";
@@ -86,7 +86,7 @@ async function feed(container, build, emptyText = "Още няма статии 
         .order("published_at", { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
       if (error) throw error;
       if (!data.length && page === 0) list.innerHTML = `<div class="empty">${esc(emptyText)}</div>`;
-      list.insertAdjacentHTML("beforeend", data.map(card).join(""));
+      list.insertAdjacentHTML("beforeend", data.map((a, i) => card(a, withLead && page === 0 && i === 0)).join(""));
       page++;
       more.classList.toggle("hidden", data.length < PAGE);
     } catch (e) { list.insertAdjacentHTML("beforeend", errBox(e)); more.classList.add("hidden"); }
@@ -140,7 +140,7 @@ async function aiPanel(box, params, label) {
 async function pageFeed(cat) {
   const c = CATS.find((x) => x.id === cat);
   view.innerHTML = c ? `<div class="page-head"><h1>${esc(c.name)}</h1></div>` : "";
-  await feed(view, (q) => (cat ? q.contains("categories", [cat]) : q));
+  await feed(view, (q) => (cat ? q.contains("categories", [cat]) : q), undefined, true);
 }
 
 async function pageArticle(id) {
@@ -149,15 +149,12 @@ async function pageArticle(id) {
   if (error || !a) { view.innerHTML = errBox(error || "Няма такава статия"); return; }
   const canFlip = a.lang !== "bg" && a.title_bg;
   view.innerHTML = `<article class="article">
-    <div class="meta"><span class="src">${esc(a.source_name)}</span><span>· ${new Date(a.published_at).toLocaleString("bg-BG", { dateStyle: "medium", timeStyle: "short" })}</span></div>
+    <div class="kicker">${(a.categories || []).map((c) => `<a class="cat" href="#/c/${enc(c)}">${esc(catName(c))}</a>`).join("")}<span class="src">${esc(a.source_name)}</span><span>${new Date(a.published_at).toLocaleString("bg-BG", { dateStyle: "medium", timeStyle: "short" })}</span></div>
     <h1>${esc(T(a))}</h1>
-    ${a.image_url ? `<img class="hero" src="${esc(a.image_url)}" alt="" onerror="this.remove()">` : ""}
     ${S(a) ? `<p class="lead">${esc(S(a))}</p>` : ""}
-    <div class="chips">
-      ${(a.categories || []).map((c) => `<a class="chip" href="#/c/${enc(c)}">${esc(catName(c))}</a>`).join("")}
-      ${(a.people || []).map((p) => `<a class="chip person" href="#/p/${enc(p)}">${esc(p)}</a>`).join("")}
-      ${(a.tags || []).map((t) => `<a class="chip tag" href="#/t/${enc(t)}">${esc(t)}</a>`).join("")}
-    </div>
+    ${a.image_url ? `<img class="hero" src="${esc(a.image_url)}" alt="" onerror="this.remove()">` : ""}
+    ${a.people?.length ? `<div class="taglist"><b>Хора:</b>${a.people.map((p) => `<a href="#/p/${enc(p)}">${esc(p)}</a>`).join("")}</div>` : ""}
+    ${a.tags?.length ? `<div class="taglist"><b>Теми:</b>${a.tags.map((t) => `<a href="#/t/${enc(t)}">${esc(t)}</a>`).join("")}</div>` : ""}
     <div class="btn-row">
       <a class="btn primary" href="${esc(a.url)}" target="_blank" rel="noopener">Прочети в ${esc(a.source_name)} ↗</a>
       ${canFlip ? `<button class="btn ghost" id="flip">${showBg(a) ? "Оригинал (EN)" : "На български"}</button>` : ""}
@@ -165,7 +162,7 @@ async function pageArticle(id) {
     <button class="btn ghost full" id="ai-btn">Предистория и контекст (AI)</button>
     <div id="ai-box"></div>
     <div class="section-title">Свързани статии от архива</div>
-    <div id="related">${loading()}</div>
+    <div id="related" class="list">${loading()}</div>
   </article>`;
   document.getElementById("flip")?.addEventListener("click", () => {
     flipped.has(a.id) ? flipped.delete(a.id) : flipped.add(a.id);
@@ -185,12 +182,12 @@ async function pageArticle(id) {
   const data = (await Promise.all([q("people", a.people), q("tags", a.tags)])).flat()
     .filter((r) => !seen.has(r.id) && seen.add(r.id))
     .sort((x, y) => new Date(y.published_at) - new Date(x.published_at)).slice(0, 15);
-  rel.innerHTML = data?.length ? data.map(card).join("") : `<div class="empty">Още няма свързани статии — архивът расте с всеки час.</div>`;
+  rel.innerHTML = data?.length ? data.map((x) => card(x)).join("") : `<div class="empty">Още няма свързани статии — архивът расте с всеки час.</div>`;
 }
 
 async function pagePerson(name) {
   view.innerHTML = `<div class="page-head"><h1>${esc(name)}</h1><p id="p-count"></p></div>
-    <button class="btn primary full" id="ai-btn">Кой е ${esc(name)}? (AI)</button>
+    <button class="btn ghost full" id="ai-btn">Кой е ${esc(name)}? (AI справка)</button>
     <div id="ai-box"></div>
     <div id="co"></div>
     <div class="section-title">Всички статии</div>
@@ -201,7 +198,7 @@ async function pagePerson(name) {
   };
   db.rpc("co_people", { person: name, max_rows: 12 }).then(({ data }) => {
     if (data?.length) document.getElementById("co").innerHTML = `<div class="section-title">Често заедно с</div>
-      <div class="chips">${data.map((p) => `<a class="chip person" href="#/p/${enc(p.name)}">${esc(p.name)} · ${p.n}</a>`).join("")}</div>`;
+      <div class="chips">${data.map((p) => `<a class="chip" href="#/p/${enc(p.name)}">${esc(p.name)} <small>${p.n}</small></a>`).join("")}</div>`;
   });
   const { data, error, count } = await activeSources(db.from("articles").select(FIELDS, { count: "exact" }))
     .contains("people", [name]).order("published_at", { ascending: false }).limit(200);
@@ -218,7 +215,7 @@ async function pagePerson(name) {
 }
 
 async function pageTag(tag) {
-  view.innerHTML = `<div class="page-head"><h1># ${esc(tag)}</h1><p>Всички статии по темата, най-новите първо</p></div>`;
+  view.innerHTML = `<div class="page-head"><h1>${esc(tag)}</h1><p>Всички статии по темата, най-новите първо</p></div>`;
   await feed(view, (q) => q.contains("tags", [tag]));
 }
 
@@ -242,7 +239,7 @@ function pageSettings() {
     <div class="section-title">Източници</div>
     <div class="list">${SOURCES.filter((s) => s.enabled !== false).map((s) => `<label class="setting"><div>${esc(s.name)}<small>${s.lang === "bg" ? "български" : "английски"}</small></div>
       <input type="checkbox" class="switch" data-src="${esc(s.id)}" ${off.includes(s.id) ? "" : "checked"}></label>`).join("")}</div>
-    <p class="empty" style="padding:20px 4px">Новите статии се събират автоматично на всеки час.<br>За инсталиране: Сподели → „Добави към началния екран“.</p>`;
+    <p class="note">Новите статии се събират автоматично на всеки час.<br>За инсталиране: Сподели → „Добави към началния екран“.</p>`;
   const seg = document.getElementById("lang-seg");
   const paint = () => seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === prefs.lang));
   paint();

@@ -1,5 +1,5 @@
 // Минимален service worker: приложението се отваря и без интернет (последната версия).
-const CACHE = "iai-v1";
+const CACHE = "iai-v2";
 const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/config.js", "/data/categories.json", "/data/sources.json"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });
