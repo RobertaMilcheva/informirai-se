@@ -19,6 +19,24 @@ const prefs = {
   get off() { return store.get("offSources", []); },
   set off(v) { store.set("offSources", v); },
 };
+// тема: "auto" (според телефона), "light" или "dark"
+const darkMQ = window.matchMedia("(prefers-color-scheme: dark)");
+function applyTheme(t) {
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  const dark = t === "dark" || (t !== "light" && darkMQ.matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.content = dark ? "#151412" : "#f8f4ec"; m.removeAttribute("media"); });
+}
+function setTheme(t) { store.set("theme", t); applyTheme(t); }
+applyTheme(store.get("theme", "auto"));
+darkMQ.addEventListener?.("change", () => applyTheme(store.get("theme", "auto")));
+document.getElementById("btn-theme").onclick = () => {
+  const t = store.get("theme", "auto");
+  const isDark = t === "dark" || (t !== "light" && darkMQ.matches);
+  setTheme(isDark ? "light" : "dark");
+  if (location.hash === "#/settings") pageSettings();
+};
+
 const flipped = new Set();   // статии, при които е натиснат "превод/оригинал"
 
 // ---------- помощни ----------
@@ -233,6 +251,9 @@ async function pageSearch(q) {
 function pageSettings() {
   const off = prefs.off;
   view.innerHTML = `<div class="page-head"><h1>Настройки</h1></div>
+    <div class="section-title">Изглед</div>
+    <div class="list"><div class="setting"><div>Тема<small>„Авто“ следва настройката на телефона</small></div>
+      <div class="seg" id="theme-seg"><button data-v="auto">Авто</button><button data-v="light">Светла</button><button data-v="dark">Тъмна</button></div></div></div>
     <div class="section-title">Чужди статии</div>
     <div class="list"><div class="setting"><div>Показвай ги<small>Можеш да превключваш и при всяка статия</small></div>
       <div class="seg" id="lang-seg"><button data-v="bg">На български</button><button data-v="orig">Оригинал</button></div></div></div>
@@ -240,6 +261,10 @@ function pageSettings() {
     <div class="list">${SOURCES.filter((s) => s.enabled !== false).map((s) => `<label class="setting"><div>${esc(s.name)}<small>${s.lang === "bg" ? "български" : "английски"}</small></div>
       <input type="checkbox" class="switch" data-src="${esc(s.id)}" ${off.includes(s.id) ? "" : "checked"}></label>`).join("")}</div>
     <p class="note">Новите статии се събират автоматично на всеки час.<br>За инсталиране: Сподели → „Добави към началния екран“.</p>`;
+  const tseg = document.getElementById("theme-seg");
+  const tpaint = () => tseg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === store.get("theme", "auto")));
+  tpaint();
+  tseg.onclick = (e) => { if (e.target.dataset.v) { setTheme(e.target.dataset.v); tpaint(); } };
   const seg = document.getElementById("lang-seg");
   const paint = () => seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === prefs.lang));
   paint();
