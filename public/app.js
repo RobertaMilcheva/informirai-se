@@ -141,19 +141,44 @@ function md(text, related) {
 }
 
 async function aiPanel(box, params, label) {
-  box.innerHTML = `<div class="ai">${loading(label)}</div>`;
+  box.innerHTML = `<div class="ai"><div class="loading"><div class="spinner"></div><span id="ai-status">${esc(label)}</span></div><div id="ai-text"></div></div>`;
+  const statusEl = box.querySelector("#ai-status"), textEl = box.querySelector("#ai-text"), loadEl = box.querySelector(".loading");
+  let text = "", related = [], timer = null;
+  const paint = () => { timer = null; textEl.innerHTML = md(text, related); };
   try {
     const r = await fetch("/api/analyze?" + new URLSearchParams(params));
-    let data;
-    try { data = await r.json(); }
-    catch { throw new Error(r.status === 504 ? "AI се забави твърде много. Опитай пак след малко." : `Сървърът върна грешка (${r.status}). Опитай пак.`); }
-    if (!r.ok) throw new Error(data.error || r.status);
-    const web = (data.web || []).map((w) => `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.title || "източник")}</a>`).join(" · ");
-    box.innerHTML = `<div class="ai">${md(data.text, data.related)}
-      <div class="foot">Генерирано от AI (Gemini) — може да съдържа неточности.${web ? `<br>Източници от мрежата: ${web}` : ""}
-      ${data.cached ? ` <a href="#" id="ai-refresh">Обнови анализа</a>` : ""}</div></div>`;
+    if (!r.body) throw new Error(`Сървърът върна грешка (${r.status}).`);
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "", final = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line) continue;
+        let m; try { m = JSON.parse(line); } catch { continue; }
+        if (m.error) throw new Error(m.error);
+        if (m.related) related = m.related;
+        if (m.status === "fallback") statusEl.textContent = "Търсенето е бавно — продължавам без него…";
+        if (m.t) { text += m.t; loadEl.classList.add("hidden"); if (!timer) timer = setTimeout(paint, 120); }
+        if (m.done) final = m;
+      }
+    }
+    if (!final) {
+      if (r.status === 504 || !text) throw new Error("AI се забави твърде много. Опитай пак след малко.");
+    }
+    clearTimeout(timer); paint();
+    const web = (final?.web || []).map((w) => `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.title || "източник")}</a>`).join(" · ");
+    textEl.insertAdjacentHTML("beforeend", `<div class="foot">Генерирано от AI (Gemini) — може да съдържа неточности.${web ? `<br>Източници от мрежата: ${web}` : ""}
+      ${final?.cached ? ` <a href="#" id="ai-refresh">Обнови справката</a>` : ""}</div>`);
     box.querySelector("#ai-refresh")?.addEventListener("click", (e) => { e.preventDefault(); aiPanel(box, { ...params, refresh: 1 }, label); });
-  } catch (e) { box.innerHTML = errBox(e); }
+  } catch (e) {
+    clearTimeout(timer);
+    if (text) { paint(); textEl.insertAdjacentHTML("beforeend", `<div class="foot">Справката е непълна: ${esc(e.message || e)}</div>`); }
+    else box.innerHTML = errBox(e);
+  }
 }
 
 // ---------- страници ----------
@@ -203,7 +228,7 @@ async function pageArticle(id) {
   });
   document.getElementById("ai-btn").onclick = (e) => {
     e.target.remove();
-    aiPanel(document.getElementById("ai-box"), { mode: "article", id: a.id }, "Събирам предисторията и връзките… (до ~45 сек)");
+    aiPanel(document.getElementById("ai-box"), { mode: "article", id: a.id }, "Търся предисторията и връзките…");
   };
   const rel = document.getElementById("related");
   const arr = (x) => "{" + x.map((v) => `"${v.replace(/["\\]/g, "\\$&")}"`).join(",") + "}";
