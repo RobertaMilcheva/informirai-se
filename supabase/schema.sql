@@ -23,6 +23,7 @@ create table if not exists public.articles (
   categories    text[] not null default '{}',
   people        text[] not null default '{}', -- имена на хора, на български
   tags          text[] not null default '{}', -- теми/събития, на български
+  region        text,                         -- 'bg' = за България, 'world' = от света
   ai_done       boolean not null default false,
   fts tsvector generated always as (
     to_tsvector('simple',
@@ -37,6 +38,7 @@ create index if not exists articles_categories_idx on public.articles using gin 
 create index if not exists articles_people_idx on public.articles using gin (people);
 create index if not exists articles_tags_idx on public.articles using gin (tags);
 create index if not exists articles_fts_idx on public.articles using gin (fts);
+create index if not exists articles_region_idx on public.articles (region, published_at desc);
 create index if not exists articles_pending_idx on public.articles (ai_done) where ai_done = false;
 
 -- Кеш за AI анализите, за да не се хаби безплатната квота

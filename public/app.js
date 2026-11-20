@@ -16,6 +16,8 @@ const store = {
 const prefs = {
   get lang() { return store.get("lang", "bg"); },            // "bg" = превод, "orig" = оригинал
   set lang(v) { store.set("lang", v); },
+  get region() { return store.get("region", "bg"); },        // "bg", "world" или "all"
+  set region(v) { store.set("region", v); },
   get off() { return store.get("offSources", []); },
   set off(v) { store.set("offSources", v); },
 };
@@ -157,8 +159,21 @@ async function aiPanel(box, params, label) {
 // ---------- страници ----------
 async function pageFeed(cat) {
   const c = CATS.find((x) => x.id === cat);
-  view.innerHTML = c ? `<div class="page-head"><h1>${esc(c.name)}</h1></div>` : "";
-  await feed(view, (q) => (cat ? q.contains("categories", [cat]) : q), undefined, true);
+  const r = prefs.region;
+  view.innerHTML = `${c ? `<div class="page-head"><h1>${esc(c.name)}</h1></div>` : ""}
+    <div class="region-seg" id="region-seg">
+      <button data-v="bg" class="${r === "bg" ? "on" : ""}">България</button>
+      <button data-v="world" class="${r === "world" ? "on" : ""}">Светът</button>
+      <button data-v="all" class="${r === "all" ? "on" : ""}">Всичко</button>
+    </div>`;
+  document.getElementById("region-seg").onclick = (e) => {
+    if (e.target.dataset.v && e.target.dataset.v !== prefs.region) { prefs.region = e.target.dataset.v; pageFeed(cat); }
+  };
+  await feed(view, (q) => {
+    if (cat) q = q.contains("categories", [cat]);
+    if (r !== "all") q = q.eq("region", r);
+    return q;
+  }, r === "bg" ? "Още няма български новини тук." : undefined, true);
 }
 
 async function pageArticle(id) {

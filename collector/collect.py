@@ -232,7 +232,8 @@ def save_source(src):
             if it["url"] in seen:
                 continue  # дубликат
             seen.add(it["url"])
-            row = {**it, "source": src["id"], "source_name": src["name"], "lang": src["lang"]}
+            row = {**it, "source": src["id"], "source_name": src["name"], "lang": src["lang"],
+                   "region": "bg" if src["lang"] == "bg" else "world"}   # временно, AI го уточнява
             if not row.get("published_at"):
                 row.pop("published_at")
             rows.append(row)
@@ -257,6 +258,7 @@ PROMPT = """Ти си редактор в българско новинарск�
 - "categories": 1 до 3 id-та от този списък (първото е най-важното):
 {cats}
 - "people": реални хора, споменати или ясно засегнати (максимум 6). Пиши пълното им име НА БЪЛГАРСКИ, в най-разпространената българска форма (напр. "Доналд Тръмп", "Владимир Путин", "Румен Радев"). Без длъжности. Ако няма хора - [].
+- "region": "bg", ако новината е за България или пряко засяга България и българските граждани (вкл. решения на ЕС, НАТО и др., отнасящи се конкретно до България); иначе "world".
 - "tags": 1 до 4 кратки теми/събития/организации на български, които помагат статията да се свърже с други (напр. "Войната в Украйна", "Еврозона", "НАТО", "Избори в САЩ 2028").
 - "title_bg" и "summary_bg": САМО ако езикът е "en" - естествен превод на заглавието и резюме на 1-2 изречения на български. Ако езикът е "bg", върни null.
 
@@ -350,6 +352,7 @@ def process_pending():
                     "categories": cats or fallback_categories(r["title"] + " " + (r["summary"] or "")),
                     "people": [p.strip() for p in (x.get("people") or []) if isinstance(p, str) and p.strip()][:6],
                     "tags": [t.strip() for t in (x.get("tags") or []) if isinstance(t, str) and t.strip()][:4],
+                    "region": x.get("region") if x.get("region") in ("bg", "world") else ("bg" if r["lang"] == "bg" else "world"),
                     "ai_done": True,
                 }
                 if r["lang"] != "bg":
