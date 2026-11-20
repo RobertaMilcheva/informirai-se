@@ -55,6 +55,11 @@ drop policy if exists "public read articles" on public.articles;
 create policy "public read articles" on public.articles
   for select to anon, authenticated using (true);
 
+-- Изрични права (новите Supabase проекти не ги дават автоматично)
+grant usage on schema public to anon, authenticated, service_role;
+grant select on public.articles to anon, authenticated;
+grant all on public.articles, public.analyses to service_role;
+
 -- Брой статии по човек (за страницата на човека и "свързани хора")
 create or replace function public.top_people(min_count int default 2, max_rows int default 200)
 returns table(name text, n bigint)
@@ -76,3 +81,4 @@ $$;
 
 grant execute on function public.top_people(int,int) to anon, authenticated;
 grant execute on function public.co_people(text,int) to anon, authenticated;
+grant execute on function public.top_people(int,int), public.co_people(text,int), public.arr_text(text[]) to service_role;
