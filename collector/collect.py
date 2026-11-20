@@ -26,7 +26,7 @@ SOURCES = json.loads((ROOT / "config" / "sources.json").read_text(encoding="utf-
 CATEGORIES = json.loads((ROOT / "config" / "categories.json").read_text(encoding="utf-8"))
 CAT_IDS = {c["id"] for c in CATEGORIES}
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_URL = re.sub(r"/rest/v1/?$", "", os.environ.get("SUPABASE_URL", "").strip().rstrip("/")).rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODELS = [m for m in [

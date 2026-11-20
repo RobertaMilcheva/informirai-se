@@ -4,7 +4,7 @@
 //   SUPABASE_SERVICE_KEY (по желание - за кеширане на анализите)
 //   GEMINI_MODEL (по желание)
 
-const SB = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SB = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "").replace(/\/+$/, "");
 const ANON = process.env.SUPABASE_ANON_KEY || "";
 const SERVICE = process.env.SUPABASE_SERVICE_KEY || "";
 const GKEY = process.env.GEMINI_API_KEY || "";

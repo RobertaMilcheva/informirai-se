@@ -1,7 +1,8 @@
 // Пуска се от Vercel при всяко публикуване: прави public/config.js от настройките в Vercel
 import { writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 
-const url = process.env.SUPABASE_URL || "";
+// приема и адреси с /rest/v1 накрая или с излишна наклонена черта
+const url = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "").replace(/\/+$/, "");
 const anon = process.env.SUPABASE_ANON_KEY || "";
 if (!url || !anon) console.warn("⚠️  Липсват SUPABASE_URL / SUPABASE_ANON_KEY във Vercel");
 
