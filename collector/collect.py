@@ -44,8 +44,10 @@ AI_BATCH = 15              # статии на една заявка към Gemi
 AI_MAX_PER_RUN = int(os.environ.get("AI_MAX_PER_RUN", "180"))
 AI_PAUSE = 6               # секунди между заявките (лимит на безплатния план)
 
-session = requests.Session()
+session = requests.Session()          # за новинарските сайтове
 session.headers["User-Agent"] = UA
+api = requests.Session()              # за Supabase и Gemini - без браузърски User-Agent,
+api.headers["User-Agent"] = "informirai-se-collector/1.0"   # иначе Supabase отказва тайния ключ
 
 
 def log(*a):
@@ -104,7 +106,7 @@ def sb_headers(extra=None):
 
 
 def sb(method, path, **kw):
-    r = session.request(method, f"{SUPABASE_URL}/rest/v1/{path}",
+    r = api.request(method, f"{SUPABASE_URL}/rest/v1/{path}",
                         headers=sb_headers(kw.pop("headers", None)), timeout=30, **kw)
     if r.status_code >= 300:
         raise RuntimeError(f"Supabase {method} {path}: {r.status_code} {r.text[:300]}")
@@ -213,14 +215,22 @@ def collect():
         if src.get("enabled") is False:
             continue
         log(f"→ {src['name']}")
+        try:
+            total += save_source(src)
+        except Exception as e:
+            log(f"  ! грешка при {src['name']}: {e}")
+    log(f"Общо нови статии: {total}")
+
+
+def save_source(src):
         items = fetch_rss(src) if src["type"] == "rss" else fetch_html(src, None)
         if not items:
             log("  (няма статии)")
-            continue
+            return 0
         rows, seen = [], set()
         for it in items:
             if it["url"] in seen:
-                continue
+                continue  # дубликат
             seen.add(it["url"])
             row = {**it, "source": src["id"], "source_name": src["name"], "lang": src["lang"]}
             if not row.get("published_at"):
@@ -236,9 +246,8 @@ def collect():
         res = sb("POST", "articles", params={"on_conflict": "url"}, json=rows,
                  headers={"Prefer": "resolution=ignore-duplicates,return=representation"})
         n = len(res or [])
-        total += n
         log(f"  {len(rows)} в източника, {n} нови")
-    log(f"Общо нови статии: {total}")
+        return n
 
 
 # ---------- AI обработка ----------
@@ -266,7 +275,7 @@ def gemini(prompt: str, json_mode=True):
     for model in list(GEMINI_MODELS):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         for attempt in range(3):
-            r = session.post(url, params={"key": GEMINI_KEY}, json=body, timeout=120)
+            r = api.post(url, params={"key": GEMINI_KEY}, json=body, timeout=120)
             if r.status_code == 429:
                 wait = 20 * (attempt + 1)
                 log(f"  лимит на Gemini, чакам {wait}s")
