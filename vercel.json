@@ -1,0 +1,6 @@
+{
+  "framework": null,
+  "buildCommand": "node build.js",
+  "outputDirectory": "public",
+  "functions": { "api/analyze.js": { "maxDuration": 60 } }
+}
