@@ -30,7 +30,11 @@
     <form class="searchbox hidden" id="search-form">
       <input id="search-input" type="search" placeholder="Търси в целия архив: име, тема, събитие…" autocomplete="off">
     </form>
-    <nav class="cats" id="cats"></nav>
+    <div class="cats-wrap">
+      <button class="cats-arrow left" id="cats-left" aria-label="Назад">‹</button>
+      <nav class="cats" id="cats"></nav>
+      <button class="cats-arrow right" id="cats-right" aria-label="Напред">›</button>
+    </div>
   </header>
   <main id="view"></main>
   <script src="/config.js"></script>

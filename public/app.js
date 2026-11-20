@@ -260,7 +260,23 @@ function renderCats(active) {
   nav.innerHTML = `<a href="#/" class="${active === "" ? "on" : ""}">Всички</a>` +
     CATS.map((c) => `<a href="#/c/${c.id}" class="${active === c.id ? "on" : ""}">${esc(c.name)}</a>`).join("");
   nav.querySelector(".on")?.scrollIntoView({ inline: "center", block: "nearest" });
+  updateArrows();
 }
+
+// превъртане на категориите с мишка: стрелки + колелцето
+const catsNav = document.getElementById("cats");
+const arrowL = document.getElementById("cats-left"), arrowR = document.getElementById("cats-right");
+function updateArrows() {
+  arrowL.classList.toggle("show", catsNav.scrollLeft > 4);
+  arrowR.classList.toggle("show", catsNav.scrollLeft + catsNav.clientWidth < catsNav.scrollWidth - 4);
+}
+arrowL.onclick = () => catsNav.scrollBy({ left: -catsNav.clientWidth * 0.7 });
+arrowR.onclick = () => catsNav.scrollBy({ left: catsNav.clientWidth * 0.7 });
+catsNav.addEventListener("scroll", updateArrows, { passive: true });
+window.addEventListener("resize", updateArrows);
+catsNav.addEventListener("wheel", (e) => {
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { catsNav.scrollBy({ left: e.deltaY, behavior: "instant" }); e.preventDefault(); }
+}, { passive: false });
 
 async function route() {
   const [, kind = "", ...rest] = location.hash.replace(/^#/, "").split("/");
