@@ -124,7 +124,9 @@ async function aiPanel(box, params, label) {
   box.innerHTML = `<div class="ai">${loading(label)}</div>`;
   try {
     const r = await fetch("/api/analyze?" + new URLSearchParams(params));
-    const data = await r.json();
+    let data;
+    try { data = await r.json(); }
+    catch { throw new Error(r.status === 504 ? "AI се забави твърде много. Опитай пак след малко." : `Сървърът върна грешка (${r.status}). Опитай пак.`); }
     if (!r.ok) throw new Error(data.error || r.status);
     const web = (data.web || []).map((w) => `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.title || "източник")}</a>`).join(" · ");
     box.innerHTML = `<div class="ai">${md(data.text, data.related)}
@@ -174,13 +176,15 @@ async function pageArticle(id) {
     aiPanel(document.getElementById("ai-box"), { mode: "article", id: a.id }, "AI търси предисторията и връзките… (до ~30 сек)");
   };
   const rel = document.getElementById("related");
-  const ors = [];
   const arr = (x) => "{" + x.map((v) => `"${v.replace(/["\\]/g, "\\$&")}"`).join(",") + "}";
-  if (a.people?.length) ors.push(`people.ov.${arr(a.people)}`);
-  if (a.tags?.length) ors.push(`tags.ov.${arr(a.tags)}`);
-  if (!ors.length) { rel.innerHTML = `<div class="empty">Няма открити връзки.</div>`; return; }
-  const { data } = await db.from("articles").select(FIELDS).neq("id", a.id).or(ors.join(","))
-    .order("published_at", { ascending: false }).limit(15);
+  if (!a.people?.length && !a.tags?.length) { rel.innerHTML = `<div class="empty">Няма открити връзки.</div>`; return; }
+  const q = (field, vals) => vals?.length
+    ? db.from("articles").select(FIELDS).neq("id", a.id).filter(field, "ov", arr(vals)).order("published_at", { ascending: false }).limit(15).then((r) => r.data || [])
+    : Promise.resolve([]);
+  const seen = new Set();
+  const data = (await Promise.all([q("people", a.people), q("tags", a.tags)])).flat()
+    .filter((r) => !seen.has(r.id) && seen.add(r.id))
+    .sort((x, y) => new Date(y.published_at) - new Date(x.published_at)).slice(0, 15);
   rel.innerHTML = data?.length ? data.map(card).join("") : `<div class="empty">Още няма свързани статии — архивът расте с всеки час.</div>`;
 }
 

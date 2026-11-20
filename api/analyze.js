@@ -28,7 +28,8 @@ async function sb(path, key = ANON, init = {}) {
 const pgArray = (arr) => "{" + arr.map((x) => `"${String(x).replace(/["\\]/g, "\\$&")}"`).join(",") + "}";
 const FIELDS = "id,url,source_name,lang,title,summary,title_bg,summary_bg,published_at,people,tags,categories";
 
-async function gemini(prompt, grounded) {
+async function gemini(prompt, grounded, budgetMs) {
+  const deadline = Date.now() + budgetMs;
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.4 },
@@ -36,9 +37,11 @@ async function gemini(prompt, grounded) {
   if (grounded) body.tools = [{ google_search: {} }];
   let lastErr = "";
   for (const model of MODELS) {
+    const left = deadline - Date.now();
+    if (left < 3000) break;
     const r = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GKEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(left) }
     );
     if (r.status === 404) { lastErr = `${model} не е наличен`; continue; }
     if (!r.ok) { lastErr = `${r.status} ${(await r.text()).slice(0, 200)}`; if (r.status === 429) break; continue; }
@@ -72,14 +75,14 @@ const STYLE = `Пиши на български, ясно и приятелск�
 async function articlePrompt(id) {
   const [a] = await sb(`articles?select=${FIELDS}&id=eq.${encodeURIComponent(id)}`);
   if (!a) throw new Error("Няма такава статия");
-  let related = [];
-  const ors = [];
-  if (a.people?.length) ors.push(`people.ov.${pgArray(a.people)}`);
-  if (a.tags?.length) ors.push(`tags.ov.${pgArray(a.tags)}`);
-  if (ors.length) {
-    related = await sb(`articles?select=${FIELDS}&id=neq.${a.id}&or=(${encodeURIComponent(ors.join(","))})` +
-      `&order=published_at.desc&limit=25`);
-  }
+  // две отделни заявки (по хора и по теми), за да не чупят скоби/запетаи в имената филтъра
+  const byField = async (field, vals) => vals?.length
+    ? sb(`articles?select=${FIELDS}&id=neq.${a.id}&${field}=ov.${encodeURIComponent(pgArray(vals))}&order=published_at.desc&limit=20`).catch(() => [])
+    : [];
+  const [p, t] = await Promise.all([byField("people", a.people), byField("tags", a.tags)]);
+  const seen = new Set();
+  const related = [...p, ...t].filter((r) => !seen.has(r.id) && seen.add(r.id))
+    .sort((x, y) => new Date(y.published_at) - new Date(x.published_at)).slice(0, 25);
   const prompt = `Читателка току-що прочете тази новина и иска да разбере цялата картинка около нея.
 
 НОВИНАТА (${fmtDate(a.published_at)}, ${a.source_name}):
@@ -147,8 +150,9 @@ export default async function handler(req, res) {
 
     const { prompt, related } = mode === "person" ? await personPrompt(subject) : await articlePrompt(subject);
     let out;
-    try { out = await gemini(prompt, true); }        // с търсене в Google за по-стар контекст
-    catch { out = await gemini(prompt, false); }      // ако безплатният лимит за търсене е изчерпан
+    // първо с търсене в Google за по-стар контекст; ако е бавно или лимитът е изчерпан - без търсене
+    try { out = await gemini(prompt, true, 26000); }
+    catch { out = await gemini(prompt, false, 24000); }
 
     const content = {
       text: out.text,
@@ -166,7 +170,8 @@ export default async function handler(req, res) {
     res.status(200).json(content);
   } catch (e) {
     const msg = String(e.message || e);
-    const friendly = msg.includes("429") ? "Дневният безплатен лимит на Gemini е изчерпан. Опитай пак по-късно." : msg;
+    const friendly = msg.includes("429") ? "Дневният безплатен лимит на Gemini е изчерпан. Опитай пак по-късно."
+      : /timeout|aborted/i.test(msg) ? "AI се забави твърде много. Опитай пак след малко." : msg;
     res.status(500).json({ error: friendly });
   }
 }
