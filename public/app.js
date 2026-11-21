@@ -2,7 +2,10 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const cfg = window.APP_CONFIG || {};
 const db = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, { auth: { persistSession: false } });
-const view = document.getElementById("view");
+const root = document.getElementById("view");
+let view = document.createElement("div");   // текущата страница (сменя се при навигация)
+root.append(view);
+const curView = () => view;   // страниците си взимат своя елемент, за да не пишат в чужда страница при бърза навигация
 const PAGE = 25;
 const FIELDS = "id,url,source,source_name,lang,title,summary,title_bg,summary_bg,image_url,published_at,categories,people,tags";
 
@@ -84,7 +87,7 @@ function card(a, lead = false) {
 }
 
 // чиповете вътре в картата водят на друго място
-view.addEventListener("click", (e) => {
+root.addEventListener("click", (e) => {
   const go = e.target.closest("[data-go]");
   if (go) { e.preventDefault(); e.stopPropagation(); location.hash = go.dataset.go; }
 });
@@ -183,6 +186,7 @@ async function aiPanel(box, params, label) {
 
 // ---------- страници ----------
 async function pageFeed(cat) {
+  const view = curView();
   const c = CATS.find((x) => x.id === cat);
   const r = prefs.region;
   view.innerHTML = `${c ? `<div class="page-head"><h1>${esc(c.name)}</h1></div>` : ""}
@@ -202,6 +206,7 @@ async function pageFeed(cat) {
 }
 
 async function pageArticle(id) {
+  const view = curView();
   view.innerHTML = loading();
   const { data: a, error } = await db.from("articles").select(FIELDS).eq("id", id).maybeSingle();
   if (error || !a) { view.innerHTML = errBox(error || "Няма такава статия"); return; }
@@ -244,6 +249,7 @@ async function pageArticle(id) {
 }
 
 async function pagePerson(name) {
+  const view = curView();
   view.innerHTML = `<div class="page-head"><h1>${esc(name)}</h1><p id="p-count"></p></div>
     <button class="btn ghost full" id="ai-btn">Кой е ${esc(name)}? (AI справка)</button>
     <div id="ai-box"></div>
@@ -273,11 +279,13 @@ async function pagePerson(name) {
 }
 
 async function pageTag(tag) {
+  const view = curView();
   view.innerHTML = `<div class="page-head"><h1>${esc(tag)}</h1><p>Всички статии по темата, най-новите първо</p></div>`;
   await feed(view, (q) => q.contains("tags", [tag]));
 }
 
 async function pageSearch(q) {
+  const view = curView();
   const input = document.getElementById("search-input");
   input.value = q;
   view.innerHTML = `<div class="page-head"><h1>Търсене: „${esc(q)}“</h1></div>`;
@@ -289,6 +297,7 @@ async function pageSearch(q) {
 }
 
 function pageSettings() {
+  const view = curView();
   const off = prefs.off;
   view.innerHTML = `<div class="page-head"><h1>Настройки</h1></div>
     <div class="section-title">Изглед</div>
@@ -340,10 +349,38 @@ catsNav.addEventListener("wheel", (e) => {
   if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { catsNav.scrollBy({ left: e.deltaY, behavior: "instant" }); e.preventDefault(); }
 }, { passive: false });
 
+// ---------- запомняне на списъците (за да "Назад" връща там, докъдето си стигнала) ----------
+history.scrollRestoration = "manual";
+const LIST_KINDS = new Set(["", "c", "t", "s", "p"]);
+const cache = new Map();          // hash -> { el, y }
+let currentHash = null, freshNav = true;
+// всяко натискане на линк вътре в приложението е "нова" навигация; "Назад" не минава оттук
+document.addEventListener("click", (e) => {
+  if (e.target.closest('a[href^="#"], [data-go]')) freshNav = true;
+}, true);
+const kindOf = (h) => (h || "#/").replace(/^#/, "").split("/")[1] || "";
+
 async function route() {
-  const [, kind = "", ...rest] = location.hash.replace(/^#/, "").split("/");
+  const hash = location.hash || "#/";
+  const [, kind = "", ...rest] = hash.replace(/^#/, "").split("/");
   const arg = decodeURIComponent(rest.join("/"));
+  // запази списъка, от който излизаме
+  if (currentHash !== null && LIST_KINDS.has(kindOf(currentHash))) {
+    cache.set(currentHash, { el: view, y: window.scrollY });
+    if (cache.size > 8) cache.delete(cache.keys().next().value);
+  }
+  const back = !freshNav; freshNav = false;
+  currentHash = hash;
   renderCats(kind === "" ? "" : kind === "c" ? arg : null);
+  const saved = cache.get(hash);
+  if (back && saved) {
+    root.replaceChildren(saved.el); view = saved.el;
+    requestAnimationFrame(() => window.scrollTo(0, saved.y));
+    return;
+  }
+  cache.delete(hash);
+  view = document.createElement("div");
+  root.replaceChildren(view);
   window.scrollTo(0, 0);
   try {
     if (kind === "c") await pageFeed(arg);
@@ -364,7 +401,7 @@ document.getElementById("btn-search").onclick = () => {
 document.getElementById("search-form").onsubmit = (e) => {
   e.preventDefault();
   const q = document.getElementById("search-input").value.trim();
-  if (q) location.hash = `#/s/${enc(q)}`;
+  if (q) { freshNav = true; location.hash = `#/s/${enc(q)}`; }
 };
 
 (async function init() {
